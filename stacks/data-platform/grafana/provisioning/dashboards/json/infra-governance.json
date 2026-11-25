@@ -1,0 +1,604 @@
+{
+  "uid": "infra-governance-v1",
+  "title": "Infra Governance & Operations Overview",
+  "tags": [
+    "infra",
+    "governance",
+    "dbt",
+    "home-infra"
+  ],
+  "timezone": "Asia/Tokyo",
+  "schemaVersion": 40,
+  "version": 1,
+  "refresh": "5m",
+  "editable": false,
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Managed Assets (NetBox)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "infra-dwh-pg"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "infra-dwh-pg"
+          },
+          "rawSql": "SELECT netbox_devices AS value FROM mart.mart_infra_kpi_daily ORDER BY snapshot_date DESC LIMIT 1;",
+          "format": "table",
+          "rawQuery": true
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Asset Reconciliation Mismatches",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "infra-dwh-pg"
+      },
+      "gridPos": {
+        "x": 4,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "infra-dwh-pg"
+          },
+          "rawSql": "SELECT reconciliation_mismatches AS value FROM mart.mart_infra_kpi_daily ORDER BY snapshot_date DESC LIMIT 1;",
+          "format": "table",
+          "rawQuery": true
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Human MFA Coverage",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "infra-dwh-pg"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 50
+              },
+              {
+                "color": "green",
+                "value": 100
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "infra-dwh-pg"
+          },
+          "rawSql": "SELECT mfa_coverage_pct AS value FROM mart.mart_infra_kpi_daily ORDER BY snapshot_date DESC LIMIT 1;",
+          "format": "table",
+          "rawQuery": true
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Multi-Host CVEs (Fleet)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "infra-dwh-pg"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 20
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "infra-dwh-pg"
+          },
+          "rawSql": "SELECT multi_host_cves AS value FROM mart.mart_infra_kpi_daily ORDER BY snapshot_date DESC LIMIT 1;",
+          "format": "table",
+          "rawQuery": true
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Hours Since Last Backup OK",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "infra-dwh-pg"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "h",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 26
+              },
+              {
+                "color": "red",
+                "value": 36
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "infra-dwh-pg"
+          },
+          "rawSql": "SELECT hours_since_last_backup_ok AS value FROM mart.mart_infra_kpi_daily ORDER BY snapshot_date DESC LIMIT 1;",
+          "format": "table",
+          "rawQuery": true
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Active Zabbix Problems",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "infra-dwh-pg"
+      },
+      "gridPos": {
+        "x": 20,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 3
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "infra-dwh-pg"
+          },
+          "rawSql": "SELECT active_zabbix_problems AS value FROM mart.mart_infra_kpi_daily ORDER BY snapshot_date DESC LIMIT 1;",
+          "format": "table",
+          "rawQuery": true
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "table",
+      "title": "3-Way Asset Reconciliation (NetBox x Fleet x Zabbix)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "infra-dwh-pg"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 24,
+        "h": 8
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "infra-dwh-pg"
+          },
+          "rawSql": "SELECT canonical_hostname, reconciliation_status, in_netbox, in_fleet, in_zabbix, netbox_role, netbox_primary_ip, fleet_platform, fleet_status, ROUND(fleet_disk_free_gb::numeric, 1) AS disk_free_gb, zabbix_active_available FROM mart.mart_asset_reconciliation ORDER BY reconciliation_status DESC, canonical_hostname;",
+          "format": "table",
+          "rawQuery": true
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "table",
+      "title": "Identity & MFA Posture (Authentik)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "infra-dwh-pg"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 12,
+        "w": 12,
+        "h": 8
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "infra-dwh-pg"
+          },
+          "rawSql": "SELECT username, user_type, posture_status, mfa_enabled, is_superuser, days_since_last_login, login_success_30d, login_failed_30d FROM mart.mart_identity_posture ORDER BY is_human_account DESC, username;",
+          "format": "table",
+          "rawQuery": true
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "table",
+      "title": "Backup Compliance History (restic -> B2)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "infra-dwh-pg"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 12,
+        "w": 12,
+        "h": 8
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "infra-dwh-pg"
+          },
+          "rawSql": "SELECT started_at, mode, status, ROUND(duration_sec::numeric, 1) AS sec, total_dump_mib, db_count, snapshot_id FROM mart.mart_backup_compliance ORDER BY started_at DESC LIMIT 20;",
+          "format": "table",
+          "rawQuery": true
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "table",
+      "title": "Top Tracked Vulnerabilities (Fleet CVEs)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "infra-dwh-pg"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 20,
+        "w": 12,
+        "h": 9
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "infra-dwh-pg"
+          },
+          "rawSql": "SELECT cve, priority_tier, hosts_count, cvss_score, cisa_known_exploit, days_open FROM mart.mart_vulnerability_posture ORDER BY hosts_count DESC, cvss_score DESC NULLS LAST, cve LIMIT 25;",
+          "format": "table",
+          "rawQuery": true
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "type": "table",
+      "title": "Top Vulnerable Software Packages (Fleet)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "infra-dwh-pg"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 20,
+        "w": 12,
+        "h": 9
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "infra-dwh-pg"
+          },
+          "rawSql": "SELECT software_name, software_version, package_source, hosts_count, vuln_count, top_cve FROM mart.mart_vulnerable_software ORDER BY hosts_count DESC, vuln_count DESC, software_name LIMIT 25;",
+          "format": "table",
+          "rawQuery": true
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,158 @@
+x-netbox-env: &netbox-env
+  DB_HOST: netbox-postgres
+  DB_NAME: ${POSTGRES_DB:-netbox}
+  DB_USER: ${POSTGRES_USER:-netbox}
+  DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+  REDIS_HOST: netbox-redis
+  REDIS_DATABASE: 0
+  REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
+  REDIS_SSL: "false"
+  REDIS_CACHE_HOST: netbox-redis-cache
+  REDIS_CACHE_DATABASE: 1
+  REDIS_CACHE_PASSWORD: ${REDIS_CACHE_PASSWORD:?Set REDIS_CACHE_PASSWORD in .env}
+  REDIS_CACHE_SSL: "false"
+  SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env}
+  API_TOKEN_PEPPER_1: ${API_TOKEN_PEPPER_1:?Set API_TOKEN_PEPPER_1 in .env}
+  CSRF_TRUSTED_ORIGINS: https://netbox.home.example.com
+  TIME_ZONE: Asia/Tokyo
+  SKIP_SUPERUSER: "true"
+  REMOTE_AUTH_ENABLED: ${REMOTE_AUTH_ENABLED:-false}
+  REMOTE_AUTH_AUTO_CREATE_USER: "true"
+  REMOTE_AUTH_BACKEND: social_core.backends.open_id_connect.OpenIdConnectAuth
+  SOCIAL_AUTH_OIDC_OIDC_ENDPOINT: https://auth.home.example.com/application/o/netbox
+  SOCIAL_AUTH_OIDC_KEY: ${SOCIAL_AUTH_OIDC_KEY:-}
+  SOCIAL_AUTH_OIDC_SECRET: ${SOCIAL_AUTH_OIDC_SECRET:-}
+  SOCIAL_AUTH_OIDC_SCOPE: openid email profile
+  LOGOUT_REDIRECT_URL: ${LOGOUT_REDIRECT_URL:-/}
+
+services:
+  netbox-postgres:
+    image: docker.io/postgres:18-alpine
+    container_name: netbox-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-netbox}
+      POSTGRES_USER: ${POSTGRES_USER:-netbox}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      TZ: Asia/Tokyo
+    volumes:
+      - netbox_postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -q -t 2 -d $${POSTGRES_DB:-netbox} -U $${POSTGRES_USER:-netbox}"]
+      start_period: 20s
+      timeout: 5s
+      interval: 10s
+      retries: 5
+    networks:
+      - netbox-net
+
+  netbox-redis:
+    image: docker.io/valkey/valkey:9.1-alpine
+    container_name: netbox-redis
+    restart: unless-stopped
+    command:
+      - sh
+      - -c
+      - valkey-server --appendonly yes --requirepass "$$REDIS_PASSWORD"
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
+      TZ: Asia/Tokyo
+    volumes:
+      - netbox_redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "[ \"$$(valkey-cli --pass \"$$REDIS_PASSWORD\" ping)\" = 'PONG' ]"]
+      start_period: 5s
+      timeout: 3s
+      interval: 5s
+      retries: 5
+    networks:
+      - netbox-net
+
+  netbox-redis-cache:
+    image: docker.io/valkey/valkey:9.1-alpine
+    container_name: netbox-redis-cache
+    restart: unless-stopped
+    command:
+      - sh
+      - -c
+      - valkey-server --requirepass "$$REDIS_CACHE_PASSWORD"
+    environment:
+      REDIS_CACHE_PASSWORD: ${REDIS_CACHE_PASSWORD:?Set REDIS_CACHE_PASSWORD in .env}
+      TZ: Asia/Tokyo
+    volumes:
+      - netbox_redis_cache_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "[ \"$$(valkey-cli --pass \"$$REDIS_CACHE_PASSWORD\" ping)\" = 'PONG' ]"]
+      start_period: 5s
+      timeout: 3s
+      interval: 5s
+      retries: 5
+    networks:
+      - netbox-net
+
+  netbox:
+    image: docker.io/netboxcommunity/netbox:v4.7-5.1.2
+    container_name: netbox
+    restart: unless-stopped
+    user: "netbox:root"
+    depends_on:
+      netbox-postgres:
+        condition: service_healthy
+      netbox-redis:
+        condition: service_healthy
+      netbox-redis-cache:
+        condition: service_healthy
+    environment:
+      <<: *netbox-env
+    volumes:
+      - netbox_media_files:/opt/netbox/netbox/media:rw
+      - netbox_reports_files:/opt/netbox/netbox/reports:rw
+      - netbox_scripts_files:/opt/netbox/netbox/scripts:rw
+    healthcheck:
+      test: /opt/netbox/health.sh
+      start_period: 300s
+      timeout: 3s
+      interval: 15s
+    networks:
+      - netbox-net
+      - proxy
+
+  netbox-worker:
+    image: docker.io/netboxcommunity/netbox:v4.7-5.1.2
+    container_name: netbox-worker
+    restart: unless-stopped
+    user: "netbox:root"
+    depends_on:
+      netbox:
+        condition: service_healthy
+    command:
+      - /opt/netbox/venv/bin/python
+      - /opt/netbox/netbox/manage.py
+      - rqworker
+    environment:
+      <<: *netbox-env
+    volumes:
+      - netbox_media_files:/opt/netbox/netbox/media:rw
+      - netbox_reports_files:/opt/netbox/netbox/reports:rw
+      - netbox_scripts_files:/opt/netbox/netbox/scripts:rw
+    healthcheck:
+      test: ["CMD-SHELL", "ps -aux | grep -v grep | grep -q rqworker || exit 1"]
+      start_period: 20s
+      timeout: 3s
+      interval: 15s
+    networks:
+      - netbox-net
+
+volumes:
+  netbox_postgres_data:
+  netbox_redis_data:
+  netbox_redis_cache_data:
+  netbox_media_files:
+  netbox_reports_files:
+  netbox_scripts_files:
+
+networks:
+  netbox-net:
+    driver: bridge
+  proxy:
+    external: true

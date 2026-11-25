@@ -1,0 +1,11 @@
+title = "home-infra-sanitized gitleaks configuration"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Allow anchored placeholder tokens only (replace-with-* / replace_with_*)"
+regexTarget = "secret"
+regexes = [
+  '''^replace[-_]with[-_][a-z0-9_-]+$''',
+]

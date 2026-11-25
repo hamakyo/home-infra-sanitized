@@ -1,0 +1,10 @@
+[Unit]
+Description=Run weekly GitHub example-user/home-infra-sanitized patrol digest on Sunday 20:00 JST
+
+[Timer]
+OnCalendar=Sun *-*-* 20:00:00
+Persistent=true
+RandomizedDelaySec=60
+
+[Install]
+WantedBy=timers.target

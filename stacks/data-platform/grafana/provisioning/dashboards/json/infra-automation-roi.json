@@ -1,0 +1,268 @@
+{
+  "uid": "infra-automation-roi-v1",
+  "title": "Infra Automation & ROI Analytics",
+  "tags": [
+    "infra",
+    "n8n",
+    "automation",
+    "roi"
+  ],
+  "timezone": "Asia/Tokyo",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "5m",
+  "time": {
+    "from": "now-30d",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "稼働中ワークフロー数",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "infra-dwh-pg"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT COUNT(*) FILTER (WHERE is_active) AS active_workflows FROM mart.mart_automation_roi;"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "累計自動実行回数",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "infra-dwh-pg"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT COALESCE(SUM(executions_total), 0) AS executions_total FROM mart.mart_automation_roi;"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "自動実行成功率 (%)",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "infra-dwh-pg"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT CASE WHEN COALESCE(SUM(executions_total),0)=0 THEN 100.0 ELSE ROUND((SUM(executions_success)::numeric / SUM(executions_total)::numeric) * 100.0, 1) END AS success_rate_pct FROM mart.mart_automation_roi;"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 85
+              },
+              {
+                "color": "green",
+                "value": 95
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "推定削減工数（分）",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "infra-dwh-pg"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT COALESCE(SUM(total_minutes_saved), 0) AS total_minutes_saved FROM mart.mart_automation_roi;"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "m",
+          "decimals": 1,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "日次 自動実行件数 ＆ 削減工数（分）トレンド",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 4
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "infra-dwh-pg"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawSql": "SELECT (exec_date_jst::timestamp AT TIME ZONE 'Asia/Tokyo') AS time, executions_success AS \"成功実行\", executions_failed AS \"失敗実行\", total_minutes_saved AS \"削減工数(分)\" FROM mart.mart_automation_roi_daily ORDER BY exec_date_jst ASC;"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 70
+          }
+        }
+      }
+    },
+    {
+      "id": 6,
+      "type": "barchart",
+      "title": "ワークフロー別 推定削減工数（分）",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 4
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "infra-dwh-pg"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT workflow_label AS \"ワークフロー\", total_minutes_saved AS \"削減工数(分)\" FROM mart.mart_automation_roi ORDER BY total_minutes_saved DESC;"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "table",
+      "title": "ワークフロー別 パフォーマンス ＆ ROI 集計（mart_automation_roi）",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 12
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "infra-dwh-pg"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT workflow_label AS \"ワークフロー\", category AS \"分類\", is_active AS \"稼働\", executions_total AS \"実行回数\", executions_success AS \"成功\", executions_failed AS \"失敗\", success_rate_pct AS \"成功率(%)\", avg_duration_sec AS \"平均秒\", estimated_manual_minutes_per_run AS \"1回想定削減(分)\", total_minutes_saved AS \"累計削減(分)\", last_executed_at AS \"最終実行\" FROM mart.mart_automation_roi ORDER BY total_minutes_saved DESC;"
+        }
+      ]
+    }
+  ]
+}

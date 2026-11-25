@@ -1,0 +1,62 @@
+---
+# 自宅インフラ Ubuntu ホスト共通変数（秘密情報は絶対に書かない）
+infra_user: infra-admin
+infra_home: "/home/{{ infra_user }}"
+infra_repo_dir: "{{ infra_home }}/dev/home-infra"
+infra_repo_url: "https://github.com/example-user/home-infra-sanitized.git"
+
+# OS 基本設定・運用最適化
+infra_timezone: "Asia/Tokyo"
+infra_headless_target: true
+unattended_reboot_time: "03:00"
+infra_e1000e_tuning_enabled: false
+
+# 基本パッケージ
+infra_base_packages:
+  - ca-certificates
+  - curl
+  - ethtool
+  - git
+  - gnupg
+  - jq
+  - python3
+  - smartmontools
+  - ufw
+  - unattended-upgrades
+
+# Docker 設定
+docker_log_max_size: "10m"
+docker_log_max_file: "3"
+docker_external_networks:
+  - proxy
+  - opencode-proxy
+  - infra-dwh-net
+  - rag-mcp-net
+
+# Zabbix Agent 2 (8.0 LTS)
+zabbix_release_deb_url: "https://repo.zabbix.com/zabbix/8.0/release/ubuntu/pool/main/z/zabbix-release/zabbix-release_latest_8.0+ubuntu24.04_all.deb"
+zabbix_agent_server_list: "172.16.0.0/12,127.0.0.1,{{ host_tailscale_ip }}"
+zabbix_agent_server_active: "{{ host_tailscale_ip }}:10051"
+
+# Backblaze B2 バックアップ（restic）
+restic_version: "0.20.0"
+restic_arch: "linux_amd64"
+restic_binary_sha256: "c109579d3a1a4d26094bef5400ac5645fceb1043414c05f51b8fb48272001c72"
+
+# 暫定ファイルサーバー USB SSD（host_fileserver_enabled: true のホストのみ適用）
+usb_ssd_vendor_id: "XXXX"
+usb_ssd_product_id: "YYYY"
+usb_ssd_max_sectors_kb: 128
+
+# Docker Compose スタック起動順（--tags stacks -e infra_stacks_deploy=true で実行）
+infra_stacks_deploy: false
+infra_sync_bind_ip_in_env: false
+infra_stack_order:
+  - caddy
+  - authentik
+  - zabbix
+  - netbox
+  - fleet
+  - data-platform
+  - n8n
+  - opencode

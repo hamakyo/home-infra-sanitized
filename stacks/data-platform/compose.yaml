@@ -1,0 +1,186 @@
+services:
+  infra-dwh-postgres:
+    image: pgvector/pgvector:0.8.7-pg17-trixie
+    container_name: infra-dwh-postgres
+    restart: unless-stopped
+    mem_limit: 768m
+    cpus: 1.5
+    pids_limit: 256
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      POSTGRES_USER: ${POSTGRES_SUPERUSER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:?Set POSTGRES_SUPERUSER_PASSWORD in .env}
+      ETL_WRITER_PASSWORD: ${ETL_WRITER_PASSWORD:?Set ETL_WRITER_PASSWORD in .env}
+      BI_READER_PASSWORD: ${BI_READER_PASSWORD:?Set BI_READER_PASSWORD in .env}
+      GRAFANA_DB_PASSWORD: ${GRAFANA_DB_PASSWORD:?Set GRAFANA_DB_PASSWORD in .env}
+      RAG_READER_PASSWORD: ${RAG_READER_PASSWORD:?Set RAG_READER_PASSWORD in .env}
+      N8N_DB_PASSWORD: ${N8N_DB_PASSWORD:?Set N8N_DB_PASSWORD in .env}
+      N8N_RO_PASSWORD: ${N8N_RO_PASSWORD:?Set N8N_RO_PASSWORD in .env}
+      TZ: Asia/Tokyo
+    volumes:
+      - infra_dwh_pgdata:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_SUPERUSER:-postgres} -d infra_dwh"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - infra-dwh-net
+
+  infra-dwh-grafana:
+    image: grafana/grafana-oss:12.4.3
+    container_name: infra-dwh-grafana
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 256
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      infra-dwh-postgres:
+        condition: service_healthy
+    environment:
+      TZ: Asia/Tokyo
+      GF_SERVER_ROOT_URL: https://bi.home.example.com
+      GF_SECURITY_ADMIN_USER: ${GF_SECURITY_ADMIN_USER:-breakglass-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD:?Set GF_SECURITY_ADMIN_PASSWORD in .env}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_DATABASE_TYPE: postgres
+      GF_DATABASE_HOST: infra-dwh-postgres:5432
+      GF_DATABASE_NAME: grafana_app
+      GF_DATABASE_USER: grafana_app
+      GF_DATABASE_PASSWORD: ${GRAFANA_DB_PASSWORD:?Set GRAFANA_DB_PASSWORD in .env}
+      GF_DATABASE_SSL_MODE: disable
+      BI_READER_PASSWORD: ${BI_READER_PASSWORD:?Set BI_READER_PASSWORD in .env}
+      GF_AUTH_GENERIC_OAUTH_ENABLED: "true"
+      GF_AUTH_GENERIC_OAUTH_NAME: Authentik
+      GF_AUTH_GENERIC_OAUTH_CLIENT_ID: ${GF_AUTH_GENERIC_OAUTH_CLIENT_ID:?Set GF_AUTH_GENERIC_OAUTH_CLIENT_ID in .env}
+      GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET: ${GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET:?Set GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET in .env}
+      GF_AUTH_GENERIC_OAUTH_SCOPES: "openid profile email"
+      GF_AUTH_GENERIC_OAUTH_AUTH_URL: https://auth.home.example.com/application/o/authorize/
+      GF_AUTH_GENERIC_OAUTH_TOKEN_URL: https://auth.home.example.com/application/o/token/
+      GF_AUTH_GENERIC_OAUTH_API_URL: https://auth.home.example.com/application/o/userinfo/
+      GF_AUTH_SIGNOUT_REDIRECT_URL: https://auth.home.example.com/application/o/infra-bi/end-session/
+      GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_PATH: "contains(groups[*], 'authentik Admins') && 'Admin' || 'Viewer'"
+      GF_AUTH_GENERIC_OAUTH_ALLOW_ASSIGN_GRAFANA_ADMIN: "true"
+      GF_AUTH_OAUTH_AUTO_LOGIN: "false"
+    volumes:
+      - infra_dwh_grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health | grep -q ok"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - infra-dwh-net
+      - proxy
+
+  infra-rag-mcp:
+    build:
+      context: .
+      dockerfile: rag_mcp/Dockerfile
+    image: infra-rag-mcp:local
+    container_name: infra-rag-mcp
+    restart: unless-stopped
+    user: "10001:10001"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 128
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=32m
+    depends_on:
+      infra-dwh-postgres:
+        condition: service_healthy
+    environment:
+      TZ: Asia/Tokyo
+      PGHOST: infra-dwh-postgres
+      PGPORT: "5432"
+      PGDATABASE: infra_dwh
+      PGUSER: rag_reader
+      PGPASSWORD: ${RAG_READER_PASSWORD:?Set RAG_READER_PASSWORD in .env}
+      RAG_MCP_TOKEN: ${RAG_MCP_TOKEN:?Set RAG_MCP_TOKEN in .env}
+      SAKURA_AI_BASE_URL: ${SAKURA_AI_BASE_URL:-https://api.ai.sakura.ad.jp/v1}
+      SAKURA_AI_API_KEY: ${SAKURA_AI_API_KEY:?Set SAKURA_AI_API_KEY in .env}
+      RAG_EMBEDDING_MODEL: ${RAG_EMBEDDING_MODEL:-multilingual-e5-large}
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; r=urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=3); assert r.status == 200"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - infra-dwh-net
+      - rag-mcp-net
+
+  infra-dwh-pipeline:
+    build:
+      context: .
+      dockerfile: pipeline/Dockerfile
+    image: infra-dwh-pipeline:local
+    container_name: infra-dwh-pipeline
+    user: "1000:1000"
+    profiles:
+      - job
+    mem_limit: 768m
+    cpus: 1.5
+    pids_limit: 256
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    depends_on:
+      infra-dwh-postgres:
+        condition: service_healthy
+    environment:
+      TZ: Asia/Tokyo
+      PGHOST: infra-dwh-postgres
+      PGPORT: "5432"
+      PGDATABASE: infra_dwh
+      PGUSER: etl_writer
+      PGPASSWORD: ${ETL_WRITER_PASSWORD:?Set ETL_WRITER_PASSWORD in .env}
+      AUTHENTIK_API_URL: ${AUTHENTIK_API_URL:-https://auth.home.example.com/api/v3}
+      AUTHENTIK_API_TOKEN: ${AUTHENTIK_API_TOKEN:?Set AUTHENTIK_API_TOKEN in .env}
+      NETBOX_API_URL: ${NETBOX_API_URL:-https://netbox.home.example.com/api}
+      NETBOX_API_TOKEN: ${NETBOX_API_TOKEN:?Set NETBOX_API_TOKEN in .env}
+      FLEET_API_URL: ${FLEET_API_URL:-https://fleet.home.example.com/api/v1/fleet}
+      FLEET_API_TOKEN: ${FLEET_API_TOKEN:?Set FLEET_API_TOKEN in .env}
+      ZABBIX_API_URL: ${ZABBIX_API_URL:-https://zabbix.home.example.com/api_jsonrpc.php}
+      ZABBIX_API_TOKEN: ${ZABBIX_API_TOKEN:?Set ZABBIX_API_TOKEN in .env}
+      SAKURA_AI_BASE_URL: ${SAKURA_AI_BASE_URL:-https://api.ai.sakura.ad.jp/v1}
+      SAKURA_AI_API_KEY: ${SAKURA_AI_API_KEY:?Set SAKURA_AI_API_KEY in .env}
+      RAG_EMBEDDING_MODEL: ${RAG_EMBEDDING_MODEL:-multilingual-e5-large}
+      HOME_INFRA_REPO_DIR: /repo-home-infra
+      BACKUP_RUNS_DIR: /backup-runs
+      N8N_RO_PASSWORD: ${N8N_RO_PASSWORD:-}
+    volumes:
+      - /home/infra-admin/.local/state/infra-backup/runs:/backup-runs:ro
+      - /home/infra-admin/dev/home-infra:/repo-home-infra:ro
+      - /home/infra-admin/.local/state/infra-dwh/dlt:/tmp/dlt
+    networks:
+      - infra-dwh-net
+
+volumes:
+  infra_dwh_pgdata:
+  infra_dwh_grafana_data:
+
+networks:
+  infra-dwh-net:
+    name: infra-dwh-net
+    driver: bridge
+  rag-mcp-net:
+    name: rag-mcp-net
+    driver: bridge
+  proxy:
+    external: true

@@ -1,0 +1,7 @@
+---
+# ubuntu-desktop 固有変数（静的インベントリ hosts.yml・NetBox 動的インベントリ netbox.yml の両方で共有）
+ansible_user: infra-admin
+host_lan_interface: eno1
+host_lan_cidr: 192.168.50.0/24
+host_fileserver_enabled: true
+infra_e1000e_tuning_enabled: true

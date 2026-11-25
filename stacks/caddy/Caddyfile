@@ -1,0 +1,75 @@
+{
+	auto_https disable_redirects
+}
+
+*.home.example.com {
+	tls {
+		dns cloudflare {env.CF_API_TOKEN}
+		resolvers 1.1.1.1
+	}
+
+	@zabbix host zabbix.home.example.com
+	handle @zabbix {
+		reverse_proxy zabbix-web:8080
+	}
+
+	@netbox host netbox.home.example.com
+	handle @netbox {
+		reverse_proxy netbox:8080
+	}
+
+	@fleet host fleet.home.example.com
+	handle @fleet {
+		reverse_proxy fleet:8080
+	}
+
+	@auth host auth.home.example.com
+	handle @auth {
+		reverse_proxy authentik-server:9000
+	}
+
+	@opencode host opencode.home.example.com
+	handle @opencode {
+		reverse_proxy opencode:4096
+	}
+
+	@bi host bi.home.example.com
+	handle @bi {
+		reverse_proxy infra-dwh-grafana:3000
+	}
+
+	@n8n host n8n.home.example.com
+	handle @n8n {
+		handle /outpost.goauthentik.io/* {
+			reverse_proxy http://authentik-server:9000
+		}
+
+		@n8n_bypass {
+			path /webhook/zabbix-triage /webhook/governance-digest /healthz
+		}
+		handle @n8n_bypass {
+			reverse_proxy n8n:5678 {
+				flush_interval -1
+			}
+		}
+
+		handle {
+			route {
+				forward_auth http://authentik-server:9000 {
+					uri /outpost.goauthentik.io/auth/caddy
+					copy_headers X-Authentik-Username X-Authentik-Groups X-Authentik-Entitlements X-Authentik-Email X-Authentik-Name X-Authentik-Uid X-Authentik-Jwt X-Authentik-Meta-Jwks X-Authentik-Meta-Outpost X-Authentik-Meta-Provider X-Authentik-Meta-App X-Authentik-Meta-Version
+					trusted_proxies private_ranges
+					header_up -Connection
+					header_up -Upgrade
+				}
+				reverse_proxy n8n:5678 {
+					flush_interval -1
+				}
+			}
+		}
+	}
+
+	handle {
+		abort
+	}
+}

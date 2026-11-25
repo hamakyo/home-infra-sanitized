@@ -1,0 +1,3 @@
+workflow_id,workflow_label,category,estimated_manual_minutes
+wf01ZabbixRagTriage,Zabbix 障害 RAG トリアージ,incident_triage,15
+wf02DailyGovDigest,日次インフラ統制ダイジェスト,governance_ops,10

@@ -1,0 +1,85 @@
+---
+- name: Install Samba and Avahi packages
+  ansible.builtin.apt:
+    name:
+      - samba
+      - avahi-daemon
+    state: present
+
+- name: Deploy USB SSD UAS-disable modprobe quirk
+  ansible.builtin.template:
+    src: usb-ssd-disable-uas.conf.j2
+    dest: /etc/modprobe.d/usb-ssd-disable-uas.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Update initramfs for usb-storage quirk
+
+- name: Deploy USB SSD autosuspend disable and max_sectors_kb udev rule
+  ansible.builtin.template:
+    src: 99-usb-ssd-no-autosuspend.rules.j2
+    dest: /etc/udev/rules.d/99-usb-ssd-no-autosuspend.rules
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload udev rules
+
+- name: Deploy hardened smb.conf from repository
+  ansible.builtin.copy:
+    src: "{{ infra_repo_dir }}/stacks/fileserver/smb.conf"
+    dest: /etc/samba/smb.conf
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0644"
+    validate: "testparm -s %s"
+  notify: Restart smbd service
+
+- name: Deploy Avahi SMB advertisement service file
+  ansible.builtin.copy:
+    src: "{{ infra_repo_dir }}/stacks/fileserver/samba.avahi.service"
+    dest: /etc/avahi/services/samba.service
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart avahi-daemon service
+
+- name: Ensure smbd.service.d drop-in directory exists
+  ansible.builtin.file:
+    path: /etc/systemd/system/smbd.service.d
+    state: directory
+    mode: "0755"
+
+- name: Deploy smbd systemd startup ordering drop-in
+  ansible.builtin.template:
+    src: smbd-10-after-tailscaled.conf.j2
+    dest: /etc/systemd/system/smbd.service.d/10-after-tailscaled.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload systemd daemon for smbd
+
+- name: Allow SMB 445/tcp only on LAN and tailscale0 in UFW
+  ansible.builtin.command: "ufw {{ item }}"
+  loop:
+    - "allow in on {{ host_lan_interface }} from {{ host_lan_cidr }} to any port 445 proto tcp comment 'Samba LAN'"
+    - "allow in on tailscale0 to any port 445 proto tcp comment 'Samba Tailscale'"
+  register: ufw_smb_res
+  changed_when: "'Skipping adding existing rule' not in ufw_smb_res.stdout"
+
+- name: Ensure nmbd is disabled and stopped
+  ansible.builtin.systemd:
+    name: nmbd
+    enabled: false
+    state: stopped
+  failed_when: false
+
+- name: Ensure smbd and avahi-daemon are enabled and running
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+  loop:
+    - smbd
+    - avahi-daemon

@@ -1,0 +1,31 @@
+source:
+  provider: github
+  owner: example-user
+  token_env: REPOLICA_GITHUB_TOKEN
+
+targets:
+  - name: gitlab-com
+    provider: gitlab
+    url: https://gitlab.com
+    namespace: example-gitlab
+    token_env: REPOLICA_GITLAB_TOKEN
+
+repositories:
+  visibility:
+    - public
+    - private
+  include:
+    - example-private-repo
+    - example-public-repo
+  exclude:
+    - private-sensitive-repo
+
+sync:
+  interval: 24h
+  concurrency: 2
+  prune: true
+  verify: true
+  cache_dir: data/mirrors
+
+backup:
+  enabled: false

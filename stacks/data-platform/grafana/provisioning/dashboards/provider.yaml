@@ -1,0 +1,12 @@
+apiVersion: 1
+
+providers:
+  - name: Infra Governance
+    orgId: 1
+    folder: Infra Governance
+    type: file
+    disableDeletion: true
+    editable: false
+    updateIntervalSeconds: 60
+    options:
+      path: /etc/grafana/provisioning/dashboards/json

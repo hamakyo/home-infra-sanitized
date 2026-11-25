@@ -1,0 +1,36 @@
+---
+- name: Verify required stack .env files exist before deployment
+  ansible.builtin.stat:
+    path: "{{ infra_repo_dir }}/stacks/{{ item }}/.env"
+  loop: "{{ infra_stack_order }}"
+  register: stack_env_stats
+  check_mode: false
+
+- name: Fail fast if any stack .env file is missing (restore from Backblaze B2 first)
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+    fail_msg: "Missing {{ infra_repo_dir }}/stacks/{{ item.item }}/.env — restore .env files from Backblaze B2 before deploying stacks."
+  loop: "{{ stack_env_stats.results }}"
+  loop_control:
+    label: "stacks/{{ item.item }}/.env"
+
+- name: Sync Tailscale bind IP in Caddy and Zabbix .env when DR IP override is enabled
+  ansible.builtin.lineinfile:
+    path: "{{ infra_repo_dir }}/{{ item.file }}"
+    regexp: "^{{ item.key }}="
+    line: "{{ item.key }}={{ host_tailscale_ip }}"
+  loop:
+    - { file: "stacks/caddy/.env", key: "CADDY_BIND_IP" }
+    - { file: "stacks/zabbix/.env", key: "ZBX_BIND_IP" }
+  when: infra_sync_bind_ip_in_env | default(false) | bool
+  no_log: true
+
+- name: Start Docker Compose stacks in dependency order
+  ansible.builtin.command:
+    cmd: docker compose up -d
+    chdir: "{{ infra_repo_dir }}/stacks/{{ item }}"
+  loop: "{{ infra_stack_order }}"
+  register: compose_up_res
+  changed_when: "'Started' in compose_up_res.stderr or 'Created' in compose_up_res.stderr or 'Recreated' in compose_up_res.stderr"
+  when: not ansible_check_mode

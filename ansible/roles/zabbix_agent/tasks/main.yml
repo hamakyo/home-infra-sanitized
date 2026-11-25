@@ -1,0 +1,62 @@
+---
+- name: Check if zabbix-agent2 is installed
+  ansible.builtin.command: which zabbix_agent2
+  register: zbx_agent_check
+  failed_when: false
+  changed_when: false
+  check_mode: false
+
+- name: Install Zabbix 8.0 LTS repository and zabbix-agent2 when missing
+  when: zbx_agent_check.rc != 0
+  block:
+    - name: Download zabbix-release deb package
+      ansible.builtin.get_url:
+        url: "{{ zabbix_release_deb_url }}"
+        dest: /tmp/zabbix-release.deb
+        mode: "0644"
+
+    - name: Install zabbix-release package
+      ansible.builtin.apt:
+        deb: /tmp/zabbix-release.deb
+
+    - name: Install zabbix-agent2
+      ansible.builtin.apt:
+        name: zabbix-agent2
+        state: present
+        update_cache: true
+
+    - name: Remove temporary zabbix-release deb
+      ansible.builtin.file:
+        path: /tmp/zabbix-release.deb
+        state: absent
+
+- name: Add zabbix user to docker group for container monitoring
+  ansible.builtin.user:
+    name: zabbix
+    groups: docker
+    append: true
+  notify: Restart zabbix-agent2
+
+- name: Allow zabbix user to run smartctl without password
+  ansible.builtin.copy:
+    dest: /etc/sudoers.d/zabbix-smartctl
+    owner: root
+    group: root
+    mode: "0440"
+    content: "zabbix ALL=(ALL) NOPASSWD: /usr/sbin/smartctl\n"
+    validate: "visudo -cf %s"
+
+- name: Deploy home-infra zabbix-agent2 drop-in configuration
+  ansible.builtin.template:
+    src: 10-home-infra.conf.j2
+    dest: /etc/zabbix/zabbix_agent2.d/10-home-infra.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart zabbix-agent2
+
+- name: Ensure zabbix-agent2 service is enabled and running
+  ansible.builtin.systemd:
+    name: zabbix-agent2
+    enabled: true
+    state: started

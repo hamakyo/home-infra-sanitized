@@ -1,0 +1,61 @@
+services:
+  opencode-init:
+    image: alpine:3.22
+    container_name: opencode-init
+    restart: "no"
+    command: ["sh", "-c", "mkdir -p /data/workspace /data/.config/opencode /data/.local/share/opencode /data/.cache && chown -R 10001:10001 /data"]
+    volumes:
+      - opencode_data:/data
+
+  opencode:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        OPENCODE_VERSION: "1.19.6"
+    container_name: opencode
+    restart: unless-stopped
+    depends_on:
+      opencode-init:
+        condition: service_completed_successfully
+    user: "10001:10001"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 1g
+    cpus: 2.0
+    pids_limit: 256
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=128m
+    environment:
+      HOME: /data
+      OPENCODE_CONFIG: /etc/opencode/opencode.json
+      OPENCODE_DISABLE_AUTOUPDATE: "true"
+      OPENCODE_SERVER_USERNAME: ${OPENCODE_SERVER_USERNAME:-opencode}
+      OPENCODE_SERVER_PASSWORD: ${OPENCODE_SERVER_PASSWORD:?Set OPENCODE_SERVER_PASSWORD in .env}
+      SAKURA_AI_API_KEY: ${SAKURA_AI_API_KEY:-}
+      RAG_MCP_TOKEN: ${RAG_MCP_TOKEN:?Set RAG_MCP_TOKEN in .env}
+      TZ: Asia/Tokyo
+    volumes:
+      - opencode_data:/data
+      - ./opencode.json:/etc/opencode/opencode.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS -u \"$${OPENCODE_SERVER_USERNAME:-opencode}:$${OPENCODE_SERVER_PASSWORD}\" http://127.0.0.1:4096/global/health >/dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - opencode-proxy
+      - rag-mcp-net
+
+volumes:
+  opencode_data:
+
+networks:
+  opencode-proxy:
+    external: true
+  rag-mcp-net:
+    external: true

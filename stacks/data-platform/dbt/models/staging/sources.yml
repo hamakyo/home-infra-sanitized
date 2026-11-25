@@ -1,0 +1,16 @@
+version: 2
+
+sources:
+  - name: raw
+    schema: raw
+    tables:
+      - name: authentik_users
+      - name: authentik_authenticators
+      - name: authentik_events
+      - name: netbox_devices
+      - name: fleet_hosts
+      - name: fleet_vulnerabilities
+      - name: fleet_vulnerable_software
+      - name: zabbix_hosts
+      - name: zabbix_problems
+      - name: backup_runs

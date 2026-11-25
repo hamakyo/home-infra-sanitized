@@ -1,0 +1,2 @@
+ACTION=="add|change", SUBSYSTEM=="usb", ATTR{idVendor}=="{{ usb_ssd_vendor_id }}", ATTR{idProduct}=="{{ usb_ssd_product_id }}", TEST=="power/control", ATTR{power/control}="on"
+ACTION=="add|change", SUBSYSTEM=="block", KERNEL=="sd[a-z]", ATTRS{idVendor}=="{{ usb_ssd_vendor_id }}", ATTRS{idProduct}=="{{ usb_ssd_product_id }}", ATTR{queue/max_sectors_kb}="{{ usb_ssd_max_sectors_kb }}"

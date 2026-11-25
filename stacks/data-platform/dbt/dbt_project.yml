@@ -1,0 +1,25 @@
+name: "infra_dwh"
+version: "1.0.0"
+config-version: 2
+
+profile: "infra_dwh"
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+
+models:
+  infra_dwh:
+    staging:
+      +schema: stg
+      +materialized: view
+    marts:
+      +schema: mart
+      +materialized: table
+      +post-hook:
+        - "GRANT SELECT ON {{ this }} TO bi_reader"
+        - "GRANT SELECT ON {{ this }} TO rag_reader"
+
+seeds:
+  infra_dwh:
+    +schema: stg

@@ -1,0 +1,281 @@
+{
+  "id": "wf02DailyGovDigest",
+  "name": "WF02: 日次インフラ統制ダイジェスト（04:15 JST・異常時通知）",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "15 4 * * *"
+            }
+          ]
+        }
+      },
+      "id": "wf02-schedule",
+      "name": "Daily 04:15 JST",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        220,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "governance-digest",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wf02-webhook",
+      "name": "Governance Digest Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        220,
+        420
+      ],
+      "webhookId": "wf02-governance-digest",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "cred-n8n-webhook",
+          "name": "n8n Webhook Header Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json || {};\nconst body = raw.body || raw;\nconst isWebhook = Boolean(raw.headers);\nconst forceNotify = body.force_notify === true;\nconst dryRun = body.dry_run === true;\nreturn [{\n  json: {\n    is_webhook: isWebhook,\n    force_notify: forceNotify,\n    dry_run: dryRun,\n    snapshot_payload: {\n      jsonrpc: '2.0',\n      id: 1,\n      method: 'tools/call',\n      params: {\n        name: 'get_infra_governance_snapshot',\n        arguments: {}\n      }\n    }\n  }\n}];"
+      },
+      "id": "wf02-prep",
+      "name": "Prepare Snapshot Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://infra-rag-mcp:8080/mcp",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.snapshot_payload) }}",
+        "options": {
+          "timeout": 25000
+        }
+      },
+      "id": "wf02-snap",
+      "name": "Get Live Governance Snapshot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        680,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "cred-infra-rag-mcp",
+          "name": "Infra RAG MCP Bearer"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const prep = $('Prepare Snapshot Request').first().json;\nconst resp = $input.first().json;\nconst text = resp?.result?.content?.[0]?.text || '{}';\nconst snap = JSON.parse(text);\nconst kpi = snap.kpi || {};\nconst evalRun = snap.latest_rag_eval || {};\n\nconst anomalies = [];\nif (Number(kpi.reconciliation_mismatches || 0) > 0) {\n  anomalies.push(`資産 3 点突合の不整合が ${kpi.reconciliation_mismatches} 件`);\n}\nif (Number(kpi.mfa_coverage_pct || 0) < 100) {\n  anomalies.push(`MFA カバレッジ率が ${kpi.mfa_coverage_pct}%（100%未満）`);\n}\nif (Number(kpi.critical_cves || 0) > 0) {\n  anomalies.push(`重大 CVE (CVSS>=9.0) が ${kpi.critical_cves} 件`);\n}\nif (Number(evalRun.leakage_violations || 0) > 0) {\n  anomalies.push(`RAG 漏洩検知が ${evalRun.leakage_violations} 件`);\n}\nif (evalRun.hit_at_3_pct !== undefined && Number(evalRun.hit_at_3_pct) < 80) {\n  anomalies.push(`RAG Hit@3 が ${evalRun.hit_at_3_pct}%（80%未満）`);\n}\n\nconst status = anomalies.length === 0 ? 'healthy' : 'attention';\nconst shouldNotify = !prep.dry_run && (anomalies.length > 0 || prep.force_notify);\nconst discordContent = [\n  `${status === 'healthy' ? '✅' : '⚠️'} **[n8n 日次インフラ統制ダイジェスト]** (${kpi.snapshot_date || 'today'})`,\n  `- 資産突合: 登録 ${kpi.total_assets ?? '?'} 台 / 不整合 ${kpi.reconciliation_mismatches ?? '?'} 件`,\n  `- ID/MFA: 適用率 ${kpi.mfa_coverage_pct ?? '?'}% (${kpi.mfa_enabled_human_users ?? '?'}/${kpi.active_human_users ?? '?'})`,\n  `- RAG 品質: Hit@3 ${evalRun.hit_at_3_pct ?? '?'}% / MRR@5 ${evalRun.mrr_at_5 ?? '?'} / 漏洩 ${evalRun.leakage_violations ?? '?'} 件`,\n  anomalies.length > 0 ? `- 要確認: ${anomalies.join(' / ')}` : '- 異常なし'\n].join('\\n');\n\nreturn [{\n  json: {\n    ok: true,\n    workflow: 'wf02DailyGovDigest',\n    status,\n    snapshot_date: kpi.snapshot_date || null,\n    anomalies,\n    should_notify: shouldNotify,\n    is_webhook: prep.is_webhook,\n    kpi,\n    latest_rag_eval: evalRun,\n    discord_content: discordContent\n  }\n}];"
+      },
+      "id": "wf02-eval",
+      "name": "Evaluate Governance Thresholds",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-should-notify",
+              "leftValue": "={{ $json.should_notify }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "wf02-if-notify",
+      "name": "Should Notify?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1120,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "webhook",
+        "content": "={{ $json.discord_content }}",
+        "options": {}
+      },
+      "id": "wf02-discord",
+      "name": "Send Discord Digest",
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        200
+      ],
+      "credentials": {
+        "discordWebhookApi": {
+          "id": "cred-discord-webhook",
+          "name": "Home Infra Discord Webhook"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true, status: $('Evaluate Governance Thresholds').first().json.status, notified: true, anomalies: $('Evaluate Governance Thresholds').first().json.anomalies }) }}",
+        "options": {}
+      },
+      "id": "wf02-resp-notify",
+      "name": "Respond (Notified)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1560,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true, status: $json.status, notified: false, anomalies: $json.anomalies, snapshot_date: $json.snapshot_date }) }}",
+        "options": {}
+      },
+      "id": "wf02-resp-quiet",
+      "name": "Respond (Quiet OK)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1340,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Daily 04:15 JST": {
+      "main": [
+        [
+          {
+            "node": "Prepare Snapshot Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Governance Digest Webhook": {
+      "main": [
+        [
+          {
+            "node": "Prepare Snapshot Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Snapshot Request": {
+      "main": [
+        [
+          {
+            "node": "Get Live Governance Snapshot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Live Governance Snapshot": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Governance Thresholds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Governance Thresholds": {
+      "main": [
+        [
+          {
+            "node": "Should Notify?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Notify?": {
+      "main": [
+        [
+          {
+            "node": "Send Discord Digest",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond (Quiet OK)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Discord Digest": {
+      "main": [
+        [
+          {
+            "node": "Respond (Notified)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Tokyo",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  }
+}

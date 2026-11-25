@@ -1,0 +1,3 @@
+raw_hostname,canonical_hostname,source_note
+laptop-01.local,laptop-01,Fleet macOS mDNS hostname to NetBox/Zabbix canonical name
+workstation-01,workstation-01,Windows NetBIOS uppercase normalized to lowercase

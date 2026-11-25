@@ -1,0 +1,6 @@
+[Unit]
+After=network-online.target tailscaled.service mnt-files.mount
+Wants=network-online.target tailscaled.service
+
+[Service]
+ExecStartPre=/bin/sh -c 'for i in $(seq 1 15); do ip -4 addr show dev tailscale0 2>/dev/null | grep -q "inet " && exit 0; sleep 1; done; exit 0'

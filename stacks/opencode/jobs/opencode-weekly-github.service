@@ -1,0 +1,10 @@
+[Unit]
+Description=Weekly GitHub example-user/home-infra-sanitized patrol digest via isolated OpenCode batch agent
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /home/infra-admin/dev/home-infra/stacks/opencode/jobs/weekly_github_patrol.py
+TimeoutStartSec=240
+StandardOutput=journal
+StandardError=journal

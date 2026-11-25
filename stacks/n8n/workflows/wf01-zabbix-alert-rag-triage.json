@@ -1,0 +1,352 @@
+{
+  "id": "wf01ZabbixRagTriage",
+  "name": "WF01: Zabbix 障害トリアージ（RAG 検索＋AI 要約＋Discord 通知）",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "zabbix-triage",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wf01-webhook",
+      "name": "Zabbix Triage Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        220,
+        300
+      ],
+      "webhookId": "wf01-zabbix-triage",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "cred-n8n-webhook",
+          "name": "n8n Webhook Header Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst body = raw.body || raw;\nconst host = String(body.host || 'ubuntu-desktop').trim();\nconst problem = String(body.problem || body.trigger || 'Unknown alert').trim();\nconst severity = String(body.severity || 'Warning').trim();\nconst dryRun = body.dry_run === true || String(body.dry_run || '').toLowerCase() === 'true';\nconst query = `${host} ${problem} 設計 対処 手順`;\nreturn [{\n  json: {\n    host,\n    problem,\n    severity,\n    dry_run: dryRun,\n    rag_payload: {\n      jsonrpc: '2.0',\n      id: 1,\n      method: 'tools/call',\n      params: {\n        name: 'search_home_infra_knowledge',\n        arguments: { query, top_k: 4 }\n      }\n    },\n    snapshot_payload: {\n      jsonrpc: '2.0',\n      id: 2,\n      method: 'tools/call',\n      params: {\n        name: 'get_infra_governance_snapshot',\n        arguments: {}\n      }\n    }\n  }\n}];"
+      },
+      "id": "wf01-prep",
+      "name": "Prepare MCP Payloads",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://infra-rag-mcp:8080/mcp",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.rag_payload) }}",
+        "options": {
+          "timeout": 25000
+        }
+      },
+      "id": "wf01-rag",
+      "name": "Search Home-Infra RAG",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "cred-infra-rag-mcp",
+          "name": "Infra RAG MCP Bearer"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://infra-rag-mcp:8080/mcp",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Prepare MCP Payloads').first().json.snapshot_payload) }}",
+        "options": {
+          "timeout": 25000
+        }
+      },
+      "id": "wf01-snap",
+      "name": "Get Live Governance Snapshot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "cred-infra-rag-mcp",
+          "name": "Infra RAG MCP Bearer"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const prep = $('Prepare MCP Payloads').first().json;\nconst ragResp = $('Search Home-Infra RAG').first().json;\nconst snapResp = $('Get Live Governance Snapshot').first().json;\n\nconst ragText = ragResp?.result?.content?.[0]?.text || '{}';\nconst snapText = snapResp?.result?.content?.[0]?.text || '{}';\n\nlet sources = [];\ntry {\n  const parsed = JSON.parse(ragText);\n  sources = [...new Set((parsed.results || []).map(r => r.source_path))];\n} catch (e) {}\n\nconst prompt = [\n  'あなたは自宅インフラ（example-user/home-infra-sanitized）の障害一次トリアージ担当です。',\n  '以下のアラート、設計書 RAG 検索結果、最新ガバナンススナップショットを基に、日本語で簡潔に回答してください。',\n  '出力形式:',\n  '1) 推定原因（1〜2行）',\n  '2) 初動確認コマンド・手順（箇条書き 3 点以内）',\n  '3) 参照した設計書パス',\n  '',\n  `【アラート】ホスト: ${prep.host} / 深刻度: ${prep.severity} / 内容: ${prep.problem}`,\n  `【RAG 検索結果】\\n${ragText.slice(0, 3200)}`,\n  `【最新スナップショット】\\n${snapText.slice(0, 1400)}`\n].join('\\n');\n\nreturn [{\n  json: {\n    host: prep.host,\n    problem: prep.problem,\n    severity: prep.severity,\n    dry_run: prep.dry_run,\n    sources,\n    ai_payload: {\n      model: 'preview/DeepSeek-V4.1-Flash-1017',\n      temperature: 0.2,\n      max_tokens: 2500,\n      messages: [\n        { role: 'system', content: '事実のみに基づき、秘密情報を出力せず簡潔にトリアージ案を作成してください。' },\n        { role: 'user', content: prompt }\n      ]\n    }\n  }\n}];"
+      },
+      "id": "wf01-build-ai",
+      "name": "Build Sakura AI Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.ai.sakura.ad.jp/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.ai_payload) }}",
+        "options": {
+          "timeout": 45000
+        }
+      },
+      "id": "wf01-ai",
+      "name": "Sakura AI Triage Summary",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "cred-sakura-ai",
+          "name": "Sakura AI Engine Bearer"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Build Sakura AI Prompt').first().json;\nconst ai = $input.first().json;\nconst summary = (ai?.choices?.[0]?.message?.content || 'AI要約を取得できませんでした').trim();\nconst header = `🚨 **[n8n RAG Triage] ${ctx.severity}** | \\`${ctx.host}\\`\\n**障害**: ${ctx.problem}\\n`;\nconst discordContent = (header + '\\n' + summary).slice(0, 1900);\nreturn [{\n  json: {\n    ok: true,\n    workflow: 'wf01ZabbixRagTriage',\n    host: ctx.host,\n    problem: ctx.problem,\n    severity: ctx.severity,\n    dry_run: ctx.dry_run,\n    sources: ctx.sources,\n    summary,\n    discord_content: discordContent\n  }\n}];"
+      },
+      "id": "wf01-format",
+      "name": "Format Triage Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-not-dry-run",
+              "leftValue": "={{ $json.dry_run }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "wf01-if",
+      "name": "Notify Discord?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1760,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "webhook",
+        "content": "={{ $json.discord_content }}",
+        "options": {}
+      },
+      "id": "wf01-discord",
+      "name": "Send Discord Triage",
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        200
+      ],
+      "credentials": {
+        "discordWebhookApi": {
+          "id": "cred-discord-webhook",
+          "name": "Home Infra Discord Webhook"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true, notified: true, host: $('Format Triage Report').first().json.host, sources: $('Format Triage Report').first().json.sources, summary: $('Format Triage Report').first().json.summary }) }}",
+        "options": {}
+      },
+      "id": "wf01-resp-notify",
+      "name": "Respond (Notified)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2200,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true, notified: false, dry_run: true, host: $json.host, sources: $json.sources, summary: $json.summary }) }}",
+        "options": {}
+      },
+      "id": "wf01-resp-dry",
+      "name": "Respond (Dry Run)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1980,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Zabbix Triage Webhook": {
+      "main": [
+        [
+          {
+            "node": "Prepare MCP Payloads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare MCP Payloads": {
+      "main": [
+        [
+          {
+            "node": "Search Home-Infra RAG",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Home-Infra RAG": {
+      "main": [
+        [
+          {
+            "node": "Get Live Governance Snapshot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Live Governance Snapshot": {
+      "main": [
+        [
+          {
+            "node": "Build Sakura AI Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Sakura AI Prompt": {
+      "main": [
+        [
+          {
+            "node": "Sakura AI Triage Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sakura AI Triage Summary": {
+      "main": [
+        [
+          {
+            "node": "Format Triage Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Triage Report": {
+      "main": [
+        [
+          {
+            "node": "Notify Discord?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Discord?": {
+      "main": [
+        [
+          {
+            "node": "Send Discord Triage",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond (Dry Run)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Discord Triage": {
+      "main": [
+        [
+          {
+            "node": "Respond (Notified)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Tokyo",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  }
+}

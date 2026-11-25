@@ -1,0 +1,31 @@
+---
+- name: Provision and harden home-infra Ubuntu host
+  hosts: infra_hosts
+  gather_facts: true
+
+  roles:
+    - role: base_hardening
+      become: true
+      tags: [base, hardening]
+
+    - role: docker_host
+      become: true
+      tags: [docker]
+
+    - role: zabbix_agent
+      become: true
+      tags: [monitoring, zabbix]
+
+    - role: backup_and_cron
+      become: false
+      tags: [backup, cron]
+
+    - role: fileserver_usb
+      become: true
+      when: host_fileserver_enabled | default(false) | bool
+      tags: [fileserver]
+
+    - role: stacks_deploy
+      become: false
+      when: infra_stacks_deploy | default(false) | bool
+      tags: [stacks]

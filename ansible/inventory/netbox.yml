@@ -1,0 +1,22 @@
+---
+# 平時運用向け NetBox 動的インベントリ（netbox.netbox.nb_inventory）
+# 実行前に `set -a; source ~/.config/home-infra/ansible-netbox.env; set +a` を読み込む
+# DR 時（NetBox 未稼働）は静的インベントリ `inventory/hosts.yml` を使用する
+plugin: netbox.netbox.nb_inventory
+api_endpoint: https://netbox.home.example.com
+token:
+  type: Bearer
+  value: "{{ lookup('ansible.builtin.env', 'NETBOX_TOKEN') }}"
+validate_certs: true
+config_context: false
+device_query_filters:
+  - status: active
+group_by:
+  - device_roles
+  - sites
+  - platforms
+  - tags
+groups:
+  infra_hosts: "not (is_virtual | default(false)) and sites is defined and 'home' in sites and device_roles is defined and 'server' in device_roles"
+compose:
+  host_tailscale_ip: "(primary_ip4.address | split('/'))[0]"

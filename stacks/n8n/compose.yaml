@@ -1,0 +1,62 @@
+services:
+  n8n:
+    image: n8nio/n8n:2.48.7
+    container_name: n8n
+    restart: unless-stopped
+    user: "1000:1000"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 768m
+    cpus: 1.5
+    pids_limit: 256
+    environment:
+      TZ: Asia/Tokyo
+      GENERIC_TIMEZONE: Asia/Tokyo
+      N8N_HOST: n8n.home.example.com
+      N8N_PORT: "5678"
+      N8N_PROTOCOL: https
+      N8N_EDITOR_BASE_URL: https://n8n.home.example.com
+      N8N_WEBHOOK_URL: https://n8n.home.example.com/
+      N8N_PROXY_HOPS: "1"
+      N8N_PUSH_BACKEND: websocket
+      N8N_SECURE_COOKIE: "true"
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?Set N8N_ENCRYPTION_KEY in .env}
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "true"
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_VERSION_NOTIFICATIONS_ENABLED: "false"
+      N8N_PERSONALIZATION_ENABLED: "false"
+      N8N_HIRING_BANNER_ENABLED: "false"
+      N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: "true"
+      EXECUTIONS_DATA_PRUNE: "true"
+      EXECUTIONS_DATA_MAX_AGE: "720"
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: infra-dwh-postgres
+      DB_POSTGRESDB_PORT: "5432"
+      DB_POSTGRESDB_DATABASE: n8n_app
+      DB_POSTGRESDB_USER: n8n_app
+      DB_POSTGRESDB_PASSWORD: ${DB_POSTGRESDB_PASSWORD:?Set DB_POSTGRESDB_PASSWORD in .env}
+    volumes:
+      - n8n_data:/home/node/.n8n
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:5678/healthz | grep -q ok"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - infra-dwh-net
+      - rag-mcp-net
+      - proxy
+
+volumes:
+  n8n_data:
+
+networks:
+  infra-dwh-net:
+    external: true
+  rag-mcp-net:
+    external: true
+  proxy:
+    external: true

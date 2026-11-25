@@ -1,0 +1,22 @@
+---
+- name: Update initramfs for usb-storage quirk
+  ansible.builtin.command: update-initramfs -u
+  changed_when: true
+
+- name: Reload udev rules
+  ansible.builtin.command: udevadm control --reload-rules
+  changed_when: true
+
+- name: Reload systemd daemon for smbd
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: Restart smbd service
+  ansible.builtin.systemd:
+    name: smbd
+    state: restarted
+
+- name: Restart avahi-daemon service
+  ansible.builtin.systemd:
+    name: avahi-daemon
+    state: restarted

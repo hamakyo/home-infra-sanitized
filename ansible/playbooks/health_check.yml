@@ -1,0 +1,34 @@
+---
+# 読み取り専用の最小ヘルスチェック Playbook（動的／静的インベントリ両対応・変更なし）
+- name: Read-only health check for home-infra hosts
+  hosts: infra_hosts
+  gather_facts: true
+  become: false
+
+  tasks:
+    - name: Verify SSH and Python connectivity
+      ansible.builtin.ping:
+
+    - name: Count running Docker containers
+      ansible.builtin.command:
+        cmd: docker ps --format '{{ '{{' }}.Names{{ '}}' }}'
+      register: docker_ps_out
+      changed_when: false
+
+    - name: Check root and fileserver disk usage
+      ansible.builtin.command:
+        cmd: df -h / /mnt/files
+      register: disk_df_out
+      changed_when: false
+      failed_when: false
+
+    - name: Report host health summary
+      ansible.builtin.debug:
+        msg:
+          hostname: "{{ inventory_hostname }}"
+          ansible_host: "{{ ansible_host | default('') }}"
+          host_tailscale_ip: "{{ host_tailscale_ip | default('') }}"
+          os: "{{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}"
+          kernel: "{{ ansible_facts['kernel'] }}"
+          running_containers: "{{ docker_ps_out.stdout_lines | length }}"
+          disk_usage: "{{ disk_df_out.stdout_lines }}"

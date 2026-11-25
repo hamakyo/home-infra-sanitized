@@ -1,0 +1,94 @@
+services:
+  zabbix-postgres:
+    image: postgres:16-alpine
+    container_name: zabbix-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-zabbix}
+      POSTGRES_USER: ${POSTGRES_USER:-zabbix}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      TZ: ${TZ:-Asia/Tokyo}
+    volumes:
+      - zabbix_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-zabbix} -d $${POSTGRES_DB:-zabbix}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - zabbix-net
+
+  zabbix-server:
+    image: zabbix/zabbix-server-pgsql:alpine-8.0-latest
+    container_name: zabbix-server
+    restart: unless-stopped
+    init: true
+    cap_add:
+      - NET_RAW
+    depends_on:
+      zabbix-postgres:
+        condition: service_healthy
+    environment:
+      DB_SERVER_HOST: zabbix-postgres
+      POSTGRES_DB: ${POSTGRES_DB:-zabbix}
+      POSTGRES_USER: ${POSTGRES_USER:-zabbix}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      TZ: ${TZ:-Asia/Tokyo}
+    ports:
+      - "${ZBX_BIND_IP:-100.64.0.10}:10051:10051"
+    networks:
+      - zabbix-net
+
+  zabbix-web:
+    image: zabbix/zabbix-web-nginx-pgsql:alpine-8.0-latest
+    container_name: zabbix-web
+    restart: unless-stopped
+    depends_on:
+      zabbix-postgres:
+        condition: service_healthy
+      zabbix-server:
+        condition: service_started
+    environment:
+      DB_SERVER_HOST: zabbix-postgres
+      DB_SERVER_PORT: 5432
+      DB_SERVER_SCHEMA: public
+      POSTGRES_DB: ${POSTGRES_DB:-zabbix}
+      POSTGRES_USER: ${POSTGRES_USER:-zabbix}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      ZBX_SERVER_HOST: zabbix-server
+      ZBX_SERVER_PORT: 10051
+      ZBX_SERVER_NAME: ${ZBX_SERVER_NAME:-Home Infra}
+      ZBX_SSO_SETTINGS: '{"baseurl":"https://zabbix.home.example.com/","use_proxy_headers":true}'
+      PHP_TZ: ${TZ:-Asia/Tokyo}
+      TZ: ${TZ:-Asia/Tokyo}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/ping >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks:
+      - zabbix-net
+      - proxy
+
+  zabbix-agent2:
+    image: zabbix/zabbix-agent2:alpine-8.0-latest
+    container_name: zabbix-agent2
+    restart: unless-stopped
+    depends_on:
+      - zabbix-server
+    environment:
+      ZBX_HOSTNAME: Zabbix server
+      ZBX_SERVER_HOST: zabbix-server
+      ZBX_SERVER_PORT: 10051
+      TZ: ${TZ:-Asia/Tokyo}
+    networks:
+      - zabbix-net
+
+volumes:
+  zabbix_postgres_data:
+
+networks:
+  zabbix-net:
+    driver: bridge
+  proxy:
+    external: true

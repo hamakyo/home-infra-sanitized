@@ -1,0 +1,11 @@
+0 7 * * * /usr/bin/python3 {{ infra_repo_dir }}/stacks/opencode/jobs/daily_health.py >> {{ infra_home }}/.local/state/opencode-jobs/cron.log 2>&1
+30 1 * * * /usr/bin/python3 {{ infra_repo_dir }}/stacks/backup/backup_phase1_db.py >> {{ infra_home }}/.local/state/infra-backup/cron.log 2>&1
+30 2 1 * * /usr/bin/python3 {{ infra_repo_dir }}/stacks/backup/backup_phase1_db.py --check >> {{ infra_home }}/.local/state/infra-backup/cron.log 2>&1
+0 8 * * 1 /usr/bin/python3 {{ infra_repo_dir }}/stacks/opencode/jobs/weekly_inventory_cve.py >> {{ infra_home }}/.local/state/opencode-jobs/cron.log 2>&1
+0 20 * * 0 /usr/bin/python3 {{ infra_repo_dir }}/stacks/opencode/jobs/weekly_github_patrol.py >> {{ infra_home }}/.local/state/opencode-jobs/cron.log 2>&1
+0 4 * * * /usr/bin/python3 {{ infra_repo_dir }}/stacks/data-platform/run_pipeline.py >> {{ infra_home }}/.local/state/infra-dwh/cron.log 2>&1
+{% if host_fileserver_enabled | default(false) | bool %}
+45 1 * * * /usr/bin/python3 {{ infra_repo_dir }}/stacks/backup/backup_fileserver.py >> {{ infra_home }}/.local/state/infra-backup/cron-fileserver.log 2>&1
+45 2 1 * * /usr/bin/python3 {{ infra_repo_dir }}/stacks/backup/backup_fileserver.py --check >> {{ infra_home }}/.local/state/infra-backup/cron-fileserver.log 2>&1
+{% endif %}
+0 2 * * * /usr/bin/python3 {{ infra_repo_dir }}/stacks/repolica/run_repolica.py >> {{ infra_home }}/.local/state/repolica/cron.log 2>&1

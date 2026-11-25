@@ -1,0 +1,69 @@
+# Golden evaluation set for Infra Governed RAG (Step 2)
+# Tests ADRs, architecture docs, operational audits, and live Infra DWH marts.
+queries:
+  - id: q01_nas_choice
+    query: "自宅NASにUGREEN DXP4800 Plusを選んだ理由と落とした候補は？"
+    expected_doc_ids:
+      - "home-infra/docs/decisions/0002-nas-ugreen-dxp4800-plus.md"
+
+  - id: q02_b2_backup
+    query: "クラウドバックアップ先にBackblaze B2とresticを選んだ理由は？"
+    expected_doc_ids:
+      - "home-infra/docs/decisions/0001-cloud-backup-backblaze-b2.md"
+      - "home-infra/docs/backup-design.md"
+
+  - id: q03_yamaha_network
+    query: "将来の自宅ネットワーク刷新でYamaha RTX830・SWX2210-8G・WLX222を選んだ構成とVLAN分離方針は？"
+    expected_doc_ids:
+      - "home-infra/docs/decisions/0003-network-yamaha-stack.md"
+      - "home-infra/docs/target-architecture.md"
+
+  - id: q04_authentik_mfa
+    query: "AuthentikのSSO連携対象とMFA・Break-glassの運用設計はどうなっている？"
+    expected_doc_ids:
+      - "home-infra/docs/identity-design.md"
+      - "home-infra/docs/decisions/0006-identity-authentik-1password.md"
+
+  - id: q05_caddy_tls
+    query: "自宅基盤のリバースプロキシにCaddyとCloudflare DNS-01ワイルドカード証明書を選んだ理由は？"
+    expected_doc_ids:
+      - "home-infra/docs/decisions/0007-reverse-proxy-caddy-wildcard-tls.md"
+      - "home-infra/docs/identity-design.md"
+
+  - id: q06_opencode_guardrails
+    query: "ubuntu-desktop上の隔離OpenCodeコンテナの5層ガードレールと無料LLMプロバイダー構成は？"
+    expected_doc_ids:
+      - "home-infra/docs/agent-runtime-design.md"
+      - "home-infra/docs/decisions/0008-agent-runtime-opencode.md"
+
+  - id: q07_headless_tuning
+    query: "ubuntu-desktopのGUIやRDPを可逆停止した手順と自動再起動の設定時刻は？"
+    expected_doc_ids:
+      - "home-infra/docs/device-management-design.md"
+
+  - id: q08_bi_grafana_vs_metabase
+    query: "データ基盤Step 1のBIにMetabase OSSを見送ってGrafana OSSを選んだ理由は？"
+    expected_doc_ids:
+      - "home-infra/docs/decisions/0010-data-platform-infra-stack.md"
+      - "home-infra/docs/data-platform-design.md"
+
+  - id: q09_apple_mdm
+    query: "Apple端末のMDMにJamf Now無料枠を最小運用で採用したスコープと制約は？"
+    expected_doc_ids:
+      - "home-infra/docs/decisions/0009-apple-mdm-jamf-now-scope.md"
+      - "home-infra/docs/device-management-design.md"
+
+  - id: q10_live_assets
+    query: "現在のNetBox・Fleet・Zabbixの資産3点突合の結果と不整合件数は？"
+    expected_doc_ids:
+      - "infra-mart/asset-reconciliation"
+
+  - id: q11_live_identity_mfa
+    query: "現在のAuthentik人間アカウントのMFA適用率と登録済みデバイス数は？"
+    expected_doc_ids:
+      - "infra-mart/identity-posture"
+
+  - id: q12_live_backup_cve
+    query: "現在のresticバックアップ鮮度とFleetで検知されている脆弱ソフトウェア上位は？"
+    expected_doc_ids:
+      - "infra-mart/backup-and-vulnerabilities"

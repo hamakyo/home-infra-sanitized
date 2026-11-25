@@ -1,0 +1,64 @@
+---
+- name: Ensure local bin and state directories exist
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: "{{ infra_home }}/.local/bin", mode: "0755" }
+    - { path: "{{ infra_home }}/.local/state/infra-backup", mode: "0700" }
+    - { path: "{{ infra_home }}/.local/state/infra-dwh", mode: "0700" }
+    - { path: "{{ infra_home }}/.local/state/opencode-jobs", mode: "0700" }
+    - { path: "{{ infra_home }}/.local/state/repolica", mode: "0700" }
+
+- name: Stat existing restic binary
+  ansible.builtin.stat:
+    path: "{{ infra_home }}/.local/bin/restic"
+    checksum_algorithm: sha256
+  register: restic_stat
+  check_mode: false
+
+- name: Download and verify restic binary when missing or mismatched
+  when: not restic_stat.stat.exists or restic_stat.stat.checksum != restic_binary_sha256
+  block:
+    - name: Download restic bz2 archive
+      ansible.builtin.get_url:
+        url: "https://github.com/restic/restic/releases/download/v{{ restic_version }}/restic_{{ restic_version }}_{{ restic_arch }}.bz2"
+        dest: "/tmp/restic_{{ restic_version }}.bz2"
+        mode: "0644"
+
+    - name: Extract and verify restic binary with SHA-256
+      ansible.builtin.shell: |
+        set -euo pipefail
+        bzip2 -dc "/tmp/restic_{{ restic_version }}.bz2" > "/tmp/restic_{{ restic_version }}.bin"
+        echo "{{ restic_binary_sha256 }}  /tmp/restic_{{ restic_version }}.bin" | sha256sum -c -
+        install -m 0755 "/tmp/restic_{{ restic_version }}.bin" "{{ infra_home }}/.local/bin/restic"
+        rm -f "/tmp/restic_{{ restic_version }}.bz2" "/tmp/restic_{{ restic_version }}.bin"
+      args:
+        executable: /bin/bash
+      changed_when: true
+
+- name: Read current user crontab
+  ansible.builtin.command: crontab -l
+  register: current_crontab
+  failed_when: false
+  changed_when: false
+  check_mode: false
+
+- name: Render desired user crontab content
+  ansible.builtin.set_fact:
+    desired_crontab: "{{ lookup('ansible.builtin.template', 'user.crontab.j2') }}"
+
+- name: Write desired crontab to staging file when changed
+  ansible.builtin.copy:
+    content: "{{ desired_crontab }}"
+    dest: "{{ infra_home }}/.local/state/infra-backup/managed.crontab"
+    mode: "0600"
+  when: (current_crontab.stdout | default('') | trim) != (desired_crontab | trim)
+
+- name: Install managed user crontab when changed
+  ansible.builtin.command: "crontab {{ infra_home }}/.local/state/infra-backup/managed.crontab"
+  when:
+    - (current_crontab.stdout | default('') | trim) != (desired_crontab | trim)
+    - not ansible_check_mode
+  changed_when: true

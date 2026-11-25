@@ -1,0 +1,104 @@
+x-authentik-env: &authentik-env
+  AUTHENTIK_POSTGRESQL__HOST: authentik-postgres
+  AUTHENTIK_POSTGRESQL__NAME: ${PG_DB:-authentik}
+  AUTHENTIK_POSTGRESQL__USER: ${PG_USER:-authentik}
+  AUTHENTIK_POSTGRESQL__PASSWORD: ${PG_PASS:?Set PG_PASS in .env}
+  AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:?Set AUTHENTIK_SECRET_KEY in .env}
+  AUTHENTIK_ERROR_REPORTING__ENABLED: "false"
+  AUTHENTIK_LISTEN__TRUSTED_PROXY_CIDRS: 127.0.0.0/8,172.16.0.0/12
+  TZ: Asia/Tokyo
+
+services:
+  authentik-postgres:
+    image: docker.io/library/postgres:16-alpine
+    container_name: authentik-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${PG_DB:-authentik}
+      POSTGRES_USER: ${PG_USER:-authentik}
+      POSTGRES_PASSWORD: ${PG_PASS:?Set PG_PASS in .env}
+      TZ: Asia/Tokyo
+    volumes:
+      - authentik_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d $${POSTGRES_DB:-authentik} -U $${POSTGRES_USER:-authentik}"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - authentik-net
+
+  authentik-init:
+    image: alpine:3.22
+    container_name: authentik-init
+    restart: "no"
+    command: ["sh", "-c", "chown -R 1000:1000 /data /certs /templates"]
+    volumes:
+      - authentik_data:/data
+      - authentik_certs:/certs
+      - authentik_templates:/templates
+
+  authentik-server:
+    image: ghcr.io/goauthentik/server:2026.8.5
+    container_name: authentik-server
+    restart: unless-stopped
+    command: server
+    depends_on:
+      authentik-postgres:
+        condition: service_healthy
+      authentik-init:
+        condition: service_completed_successfully
+    environment:
+      <<: *authentik-env
+    shm_size: 512mb
+    volumes:
+      - authentik_data:/data
+      - authentik_templates:/templates
+    healthcheck:
+      test: ["CMD", "ak", "healthcheck"]
+      interval: 30s
+      timeout: 30s
+      retries: 5
+      start_period: 120s
+    networks:
+      - authentik-net
+      - proxy
+
+  authentik-worker:
+    image: ghcr.io/goauthentik/server:2026.8.5
+    container_name: authentik-worker
+    restart: unless-stopped
+    command: worker
+    depends_on:
+      authentik-postgres:
+        condition: service_healthy
+      authentik-init:
+        condition: service_completed_successfully
+    environment:
+      <<: *authentik-env
+    shm_size: 512mb
+    volumes:
+      - authentik_data:/data
+      - authentik_certs:/certs
+      - authentik_templates:/templates
+    healthcheck:
+      test: ["CMD", "ak", "healthcheck"]
+      interval: 30s
+      timeout: 30s
+      retries: 5
+      start_period: 120s
+    networks:
+      - authentik-net
+
+volumes:
+  authentik_postgres_data:
+  authentik_data:
+  authentik_certs:
+  authentik_templates:
+
+networks:
+  authentik-net:
+    driver: bridge
+  proxy:
+    external: true

@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily ubuntu-desktop health digest via isolated OpenCode batch agent
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /home/infra-admin/dev/home-infra/stacks/opencode/jobs/daily_health.py
+TimeoutStartSec=240
+StandardOutput=journal
+StandardError=journal
